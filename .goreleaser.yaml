@@ -1,0 +1,28 @@
+project_name: cask
+builds:
+  - env: [CGO_ENABLED=0]
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: cask
+    ldflags:
+      - -s -w
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+brews:
+  - name: cask
+    repository:
+      owner: stenstromen
+      name: homebrew-tap
+    commit_author:
+      name: stenstromen
+    homepage: https://github.com/Stenstromen/cask
+    description: Cloudflare ASK (CASK) is a Go binary for asking Cloudflare Workers AI (Llama 3.1 8B Instruct) for shell command suggestions, git command suggestions, or quick answers to general technical questions, straight from the terminal.
+    directory: Formula

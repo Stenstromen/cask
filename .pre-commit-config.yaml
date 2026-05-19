@@ -1,0 +1,15 @@
+---
+repos:
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-vet
+      - id: go-build
+      - id: go-mod-tidy
+  - repo: local
+    hooks:
+      - id: test
+        name: Running Go Tests
+        entry: go test ./...
+        language: golang
+        pass_filenames: false
