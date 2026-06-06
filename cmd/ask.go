@@ -5,6 +5,7 @@ import (
 
 	"github.com/stenstromen/cask/resource"
 
+	"github.com/adhocore/chin"
 	"github.com/spf13/cobra"
 )
 
@@ -21,6 +22,7 @@ var queryCmd = &cobra.Command{
 
 Run without a prompt to print help, or with -s or -m or -g alone to see an example prompt.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		spinner := chin.New()
 		shell, _ := cmd.Flags().GetBool("shell")
 		miscellaneous, _ := cmd.Flags().GetBool("miscellaneous")
 		git, _ := cmd.Flags().GetBool("git")
@@ -48,6 +50,8 @@ Run without a prompt to print help, or with -s or -m or -g alone to see an examp
 			return fmt.Errorf("use only one of -s/--shell or -m/--miscellaneous or -g/--git")
 		}
 
+		go spinner.Start()
+
 		mode := resource.ModeShell
 		if miscellaneous {
 			mode = resource.ModeMiscellaneous
@@ -55,7 +59,12 @@ Run without a prompt to print help, or with -s or -m or -g alone to see an examp
 		if git {
 			mode = resource.ModeGit
 		}
-		return resource.ApiRequest(mode, args)
+
+		apiResult := resource.ApiRequest(mode, args)
+
+		spinner.Stop()
+
+		return apiResult
 	},
 }
 
