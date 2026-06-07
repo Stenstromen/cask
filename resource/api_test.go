@@ -1,13 +1,13 @@
 package resource
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -30,11 +30,9 @@ func resetConfigState(t *testing.T) {
 	t.Helper()
 	prevOverride := ConfigPathOverride
 	prevBase := apiBaseURL
-	prevOut := output
 	t.Cleanup(func() {
 		ConfigPathOverride = prevOverride
 		apiBaseURL = prevBase
-		output = prevOut
 	})
 	ConfigPathOverride = ""
 }
@@ -229,7 +227,7 @@ func TestApiRequest_EmptyPromptRejected(t *testing.T) {
 		{"  ", "\t", "\n"},
 	}
 	for _, args := range cases {
-		err := ApiRequest(ModeShell, args)
+		_, err := ApiRequest(ModeShell, args)
 		if err == nil {
 			t.Errorf("expected error for args %v, got nil", args)
 			continue
@@ -244,7 +242,7 @@ func TestApiRequest_ConfigLoadError(t *testing.T) {
 	resetConfigState(t)
 	ConfigPathOverride = filepath.Join(t.TempDir(), "missing.yaml")
 
-	err := ApiRequest(ModeShell, []string{"hello"})
+	_, err := ApiRequest(ModeShell, []string{"hello"})
 	if err == nil {
 		t.Fatal("expected error from missing config, got nil")
 	}
@@ -283,16 +281,14 @@ func newTestServer(t *testing.T, status int, respBody string) (*httptest.Server,
 func TestApiRequest_SuccessShellMode(t *testing.T) {
 	resetConfigState(t)
 	srv, cap := newTestServer(t, http.StatusOK,
-		`{"result":{"response":"find . -size +100M"},"success":true}`)
+		`{"result":{"response":"1. find . -size +100M\n2. du -ah . | sort -rh\n3. ls -lhS"},"success":true}`)
 	apiBaseURL = srv.URL
-
-	var outBuf bytes.Buffer
-	output = &outBuf
 
 	ConfigPathOverride = writeTempConfig(t,
 		"cloudflare_account_id: my-acct\ncloudflare_api_key: secret-token\n")
 
-	if err := ApiRequest(ModeShell, []string{"find", "big", "files"}); err != nil {
+	items, err := ApiRequest(ModeShell, []string{"find", "big", "files"})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -321,8 +317,9 @@ func TestApiRequest_SuccessShellMode(t *testing.T) {
 		t.Errorf("prompt %q should use the shell-mode template", payload["prompt"])
 	}
 
-	if got := strings.TrimSpace(outBuf.String()); got != "find . -size +100M" {
-		t.Errorf("output = %q, want %q", got, "find . -size +100M")
+	want := []string{"find . -size +100M", "du -ah . | sort -rh", "ls -lhS"}
+	if !reflect.DeepEqual(items, want) {
+		t.Errorf("items = %#v, want %#v", items, want)
 	}
 }
 
@@ -331,12 +328,11 @@ func TestApiRequest_UsesGitTemplateForGitMode(t *testing.T) {
 	srv, cap := newTestServer(t, http.StatusOK,
 		`{"result":{"response":"git revert HEAD"},"success":true}`)
 	apiBaseURL = srv.URL
-	output = io.Discard
 
 	ConfigPathOverride = writeTempConfig(t,
 		"cloudflare_account_id: a\ncloudflare_api_key: b\n")
 
-	if err := ApiRequest(ModeGit, []string{"undo", "last", "commit"}); err != nil {
+	if _, err := ApiRequest(ModeGit, []string{"undo", "last", "commit"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	var payload map[string]string
@@ -352,11 +348,10 @@ func TestApiRequest_HTTPErrorStatus(t *testing.T) {
 	resetConfigState(t)
 	srv, _ := newTestServer(t, http.StatusUnauthorized, `{"errors":["nope"]}`)
 	apiBaseURL = srv.URL
-	output = io.Discard
 	ConfigPathOverride = writeTempConfig(t,
 		"cloudflare_account_id: a\ncloudflare_api_key: b\n")
 
-	err := ApiRequest(ModeShell, []string{"do", "thing"})
+	_, err := ApiRequest(ModeShell, []string{"do", "thing"})
 	if err == nil {
 		t.Fatal("expected error for 401 status, got nil")
 	}
@@ -373,11 +368,10 @@ func TestApiRequest_APIReportsFailure(t *testing.T) {
 	srv, _ := newTestServer(t, http.StatusOK,
 		`{"success":false,"errors":["model overloaded"]}`)
 	apiBaseURL = srv.URL
-	output = io.Discard
 	ConfigPathOverride = writeTempConfig(t,
 		"cloudflare_account_id: a\ncloudflare_api_key: b\n")
 
-	err := ApiRequest(ModeShell, []string{"hi"})
+	_, err := ApiRequest(ModeShell, []string{"hi"})
 	if err == nil {
 		t.Fatal("expected error when success=false, got nil")
 	}
@@ -390,11 +384,10 @@ func TestApiRequest_InvalidJSONResponse(t *testing.T) {
 	resetConfigState(t)
 	srv, _ := newTestServer(t, http.StatusOK, `not json at all`)
 	apiBaseURL = srv.URL
-	output = io.Discard
 	ConfigPathOverride = writeTempConfig(t,
 		"cloudflare_account_id: a\ncloudflare_api_key: b\n")
 
-	err := ApiRequest(ModeShell, []string{"hi"})
+	_, err := ApiRequest(ModeShell, []string{"hi"})
 	if err == nil {
 		t.Fatal("expected error for non-JSON response, got nil")
 	}

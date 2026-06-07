@@ -2,11 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/stenstromen/cask/resource"
 
 	"github.com/adhocore/chin"
+	"github.com/atotto/clipboard"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const (
@@ -60,12 +63,67 @@ Run without a prompt to print help, or with -s or -m or -g alone to see an examp
 			mode = resource.ModeGit
 		}
 
-		apiResult := resource.ApiRequest(mode, args)
-
+		items, err := resource.ApiRequest(mode, args)
 		spinner.Stop()
+		if err != nil {
+			return err
+		}
 
-		return apiResult
+		for i, item := range items {
+			fmt.Fprintf(cmd.OutOrStdout(), "%d. %s\n", i+1, item)
+		}
+
+		return copyPrompt(cmd, items)
 	},
+}
+
+// copyPrompt lets the user press a number key to copy the matching item to the
+// clipboard. It is a no-op when stdin is not an interactive terminal (e.g. when
+// output is piped or during tests) so non-interactive usage still works.
+func copyPrompt(cmd *cobra.Command, items []string) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	in, ok := cmd.InOrStdin().(*os.File)
+	if !ok || !term.IsTerminal(int(in.Fd())) {
+		return nil
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "\nPress 1-%d to copy to clipboard (any other key to exit): ", len(items))
+
+	key, err := readKey(in)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(cmd.OutOrStdout())
+
+	choice := int(key - '0')
+	if choice < 1 || choice > len(items) {
+		return nil
+	}
+
+	if err := clipboard.WriteAll(items[choice-1]); err != nil {
+		return fmt.Errorf("failed to copy to clipboard: %w", err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Copied: %s\n", items[choice-1])
+	return nil
+}
+
+// readKey puts the terminal in raw mode and reads a single keypress so the
+// user doesn't have to hit Enter. The terminal state is always restored.
+func readKey(f *os.File) (byte, error) {
+	oldState, err := term.MakeRaw(int(f.Fd()))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = term.Restore(int(f.Fd()), oldState) }()
+
+	buf := make([]byte, 1)
+	if _, err := f.Read(buf); err != nil {
+		return 0, err
+	}
+	return buf[0], nil
 }
 
 func init() {
