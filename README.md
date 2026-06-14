@@ -13,9 +13,21 @@ Cloudflare ASK (CASK) is a Go binary for asking Cloudflare Workers AI (Llama 3.1
 
 ## Installation via Homebrew (MacOS/Linux - x86_64/arm64)
 
+Installing with the fully-qualified name trusts only this cask, so it works as-is under Homebrew's [tap trust](https://docs.brew.sh/Tap-Trust) system:
+
 ```bash
 brew install stenstromen/tap/cask
 ```
+
+If you prefer to tap first and install by short name, explicitly trust the cask before installing (required in Homebrew 6.0.0 / 5.2.0 and later):
+
+```bash
+brew tap stenstromen/tap
+brew trust --cask stenstromen/tap/cask
+brew install cask
+```
+
+You can also trust the whole tap with `brew trust stenstromen/tap`, but trusting only the cask you need is recommended.
 
 ## Download and Run Binary
 
