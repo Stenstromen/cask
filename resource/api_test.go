@@ -163,8 +163,7 @@ func TestLoadConfig_MissingFields(t *testing.T) {
 	}
 }
 
-func TestWrapPrompt(t *testing.T) {
-	const input = "list big files"
+func TestSystemPrompt(t *testing.T) {
 	cases := []struct {
 		name     string
 		mode     Mode
@@ -173,27 +172,27 @@ func TestWrapPrompt(t *testing.T) {
 		{
 			name:     "shell",
 			mode:     ModeShell,
-			contains: []string{"suggest shell commands", input, "no more than 20 words"},
+			contains: []string{"suggest shell commands", "at most 3 commands", "Do NOT use markdown"},
 		},
 		{
 			name:     "git",
 			mode:     ModeGit,
-			contains: []string{"suggest git commands", input, "no more than 20 words"},
+			contains: []string{"suggest git commands", "at most 3 commands", "Do NOT use markdown"},
 		},
 		{
 			name:     "miscellaneous",
 			mode:     ModeMiscellaneous,
-			contains: []string{"Answer this technical question", input, "no more than 60 words"},
+			contains: []string{"Answer the user's technical question", "no more than 60 words"},
 		},
 		{
 			name:     "unknown mode falls back to shell",
 			mode:     Mode(99),
-			contains: []string{"suggest shell commands", input},
+			contains: []string{"suggest shell commands"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := wrapPrompt(tc.mode, input)
+			got := systemPrompt(tc.mode)
 			for _, want := range tc.contains {
 				if !strings.Contains(got, want) {
 					t.Errorf("prompt %q missing substring %q", got, want)
@@ -203,12 +202,12 @@ func TestWrapPrompt(t *testing.T) {
 	}
 }
 
-func TestWrapPrompt_GitAndShellAreDifferent(t *testing.T) {
+func TestSystemPrompt_GitAndShellAreDifferent(t *testing.T) {
 	// Regression guard: each mode should produce a distinct template so a
 	// future copy-paste edit can't silently collapse them.
-	shell := wrapPrompt(ModeShell, "x")
-	git := wrapPrompt(ModeGit, "x")
-	misc := wrapPrompt(ModeMiscellaneous, "x")
+	shell := systemPrompt(ModeShell)
+	git := systemPrompt(ModeGit)
+	misc := systemPrompt(ModeMiscellaneous)
 	if shell == git || shell == misc || git == misc {
 		t.Errorf("prompts should be distinct per mode: shell=%q git=%q misc=%q", shell, git, misc)
 	}
@@ -295,7 +294,7 @@ func TestApiRequest_SuccessShellMode(t *testing.T) {
 	if cap.method != http.MethodPost {
 		t.Errorf("method = %q, want POST", cap.method)
 	}
-	wantPath := "/accounts/my-acct/ai/run/@cf/meta/llama-3.1-8b-instruct"
+	wantPath := "/accounts/my-acct/ai/run/@cf/meta/llama-3.1-8b-instruct-fast"
 	if cap.path != wantPath {
 		t.Errorf("path = %q, want %q", cap.path, wantPath)
 	}
@@ -306,15 +305,12 @@ func TestApiRequest_SuccessShellMode(t *testing.T) {
 		t.Errorf("content-type = %q, want application/json", cap.ctype)
 	}
 
-	var payload map[string]string
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("body is not valid JSON: %v (body=%s)", err, cap.body)
+	sys, user := decodeMessages(t, cap.body)
+	if !strings.Contains(user, "find big files") {
+		t.Errorf("user message %q should contain joined args", user)
 	}
-	if !strings.Contains(payload["prompt"], "find big files") {
-		t.Errorf("prompt %q should contain joined args", payload["prompt"])
-	}
-	if !strings.Contains(payload["prompt"], "shell commands") {
-		t.Errorf("prompt %q should use the shell-mode template", payload["prompt"])
+	if !strings.Contains(sys, "shell commands") {
+		t.Errorf("system message %q should use the shell-mode template", sys)
 	}
 
 	want := []string{"find . -size +100M", "du -ah . | sort -rh", "ls -lhS"}
@@ -335,13 +331,34 @@ func TestApiRequest_UsesGitTemplateForGitMode(t *testing.T) {
 	if _, err := ApiRequest(ModeGit, []string{"undo", "last", "commit"}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var payload map[string]string
-	if err := json.Unmarshal(cap.body, &payload); err != nil {
-		t.Fatalf("body is not valid JSON: %v", err)
+	sys, _ := decodeMessages(t, cap.body)
+	if !strings.Contains(sys, "git commands") {
+		t.Errorf("git-mode system message %q should mention 'git commands'", sys)
 	}
-	if !strings.Contains(payload["prompt"], "git commands") {
-		t.Errorf("git-mode prompt %q should mention 'git commands'", payload["prompt"])
+}
+
+// decodeMessages unmarshals a captured request body and returns the system and
+// user message contents.
+func decodeMessages(t *testing.T, body []byte) (system, user string) {
+	t.Helper()
+	var payload struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
 	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("body is not valid JSON: %v (body=%s)", err, body)
+	}
+	for _, m := range payload.Messages {
+		switch m.Role {
+		case "system":
+			system = m.Content
+		case "user":
+			user = m.Content
+		}
+	}
+	return system, user
 }
 
 func TestApiRequest_HTTPErrorStatus(t *testing.T) {

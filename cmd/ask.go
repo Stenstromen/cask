@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/stenstromen/cask/resource"
 
@@ -69,12 +71,62 @@ Run without a prompt to print help, or with -s or -m or -g alone to see an examp
 			return err
 		}
 
+		// Miscellaneous answers are prose, not a list of commands: print the
+		// text wrapped to a sane width and don't offer to copy anything.
+		if mode == resource.ModeMiscellaneous {
+			answer := strings.Join(items, " ")
+			fmt.Fprintln(cmd.OutOrStdout(), wrapText(answer, wrapWidth(cmd)))
+			return nil
+		}
+
 		for i, item := range items {
 			fmt.Fprintf(cmd.OutOrStdout(), "%d. %s\n", i+1, item)
 		}
 
 		return copyPrompt(cmd, items)
 	},
+}
+
+// wrapWidth picks a wrapping width: capped at 80 columns so output doesn't run
+// across very wide terminals, and shrunk to fit narrow ones.
+func wrapWidth(cmd *cobra.Command) int {
+	const max = 80
+	width := max
+	if out, ok := cmd.OutOrStdout().(*os.File); ok {
+		if w, _, err := term.GetSize(int(out.Fd())); err == nil && w > 0 && w < width {
+			width = w
+		}
+	}
+	return width
+}
+
+// wrapText soft-wraps s at word boundaries so no line exceeds width runes.
+// Words longer than width are left intact on their own line.
+func wrapText(s string, width int) string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	lineLen := 0
+	for i, w := range words {
+		wl := utf8.RuneCountInString(w)
+		if i == 0 {
+			b.WriteString(w)
+			lineLen = wl
+			continue
+		}
+		if width > 0 && lineLen+1+wl > width {
+			b.WriteByte('\n')
+			b.WriteString(w)
+			lineLen = wl
+			continue
+		}
+		b.WriteByte(' ')
+		b.WriteString(w)
+		lineLen += 1 + wl
+	}
+	return b.String()
 }
 
 // copyPrompt lets the user press a number key to copy the matching item to the

@@ -9,7 +9,7 @@
     - [Writing the config file](#writing-the-config-file)
   - [Example Usage](#example-usage)
 
-Cloudflare ASK (CASK) is a Go binary for asking Cloudflare Workers AI (Llama 3.1 8B Instruct) for shell command suggestions, git command suggestions, or quick answers to general technical questions, straight from the terminal.
+Cloudflare ASK (CASK) is a Go binary for asking Cloudflare Workers AI (Llama 3.1 8B Instruct Fast) for shell command suggestions, git command suggestions, or quick answers to general technical questions, straight from the terminal.
 
 ## Installation via Homebrew (MacOS/Linux - x86_64/arm64)
 
