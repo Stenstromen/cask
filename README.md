@@ -1,5 +1,7 @@
 # CASK
 
+![CASK](./cask.webp)
+
 - [CASK](#cask)
   - [Installation via Homebrew (MacOS/Linux - x86\_64/arm64)](#installation-via-homebrew-macoslinux---x86_64arm64)
   - [Download and Run Binary](#download-and-run-binary)
