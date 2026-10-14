@@ -2,6 +2,7 @@ package resource
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,6 +44,33 @@ func configPath() (string, error) {
 	return filepath.Join(home, ".cask.yaml"), nil
 }
 
+// missingConfigError means the resolved config path does not exist yet.
+// Its message is written for a first run: where to create the file and what to put in it.
+type missingConfigError struct {
+	path string
+}
+
+func (e *missingConfigError) Error() string {
+	return fmt.Sprintf(`config file not found: %s
+
+cask needs Cloudflare Workers AI credentials before it can answer a query.
+Create %s with:
+
+  cloudflare_account_id: YOUR_CLOUDFLARE_ACCOUNT_ID
+  cloudflare_api_key: YOUR_CLOUDFLARE_API_KEY
+
+In the Cloudflare dashboard, open Workers AI, choose Use REST API, copy the Account ID, and create an API token with Workers AI Read and Edit.
+Then restrict the file: chmod 600 %s
+
+To use a different file, pass --config <path> or set CASKCONFIG to an absolute path.`, e.path, e.path, e.path)
+}
+
+// IsMissingConfig reports whether err means the config file has not been created yet.
+func IsMissingConfig(err error) bool {
+	var missing *missingConfigError
+	return errors.As(err, &missing)
+}
+
 func loadConfig() (Config, error) {
 	var cfg Config
 	path, err := configPath()
@@ -51,6 +79,9 @@ func loadConfig() (Config, error) {
 	}
 	yamlFile, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return cfg, &missingConfigError{path: path}
+		}
 		return cfg, fmt.Errorf("failed to read config file %s: %w", path, err)
 	}
 	if err := yaml.Unmarshal(yamlFile, &cfg); err != nil {

@@ -68,6 +68,11 @@ Run without a prompt to print help, or with -s or -m or -g alone to see an examp
 		items, err := resource.ApiRequest(mode, args)
 		spinner.Stop()
 		if err != nil {
+			// The setup instructions are the whole message; the query usage
+			// banner does not help someone who has not created a config yet.
+			if resource.IsMissingConfig(err) {
+				cmd.SilenceUsage = true
+			}
 			return err
 		}
 

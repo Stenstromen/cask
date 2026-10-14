@@ -149,7 +149,7 @@ func TestQuery_PromptForwardedToApiRequest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from missing config, got nil")
 	}
-	if !strings.Contains(err.Error(), "failed to read config file") {
+	if !resource.IsMissingConfig(err) {
 		t.Errorf("error %q should bubble up from resource.loadConfig", err.Error())
 	}
 	if !strings.Contains(err.Error(), missing) {

@@ -119,8 +119,20 @@ func TestLoadConfig_MissingFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing file, got nil")
 	}
-	if !strings.Contains(err.Error(), "failed to read config file") {
-		t.Errorf("error %q should mention 'failed to read config file'", err.Error())
+	if !IsMissingConfig(err) {
+		t.Fatalf("error %q should be a missing-config error", err.Error())
+	}
+	for _, want := range []string{
+		"config file not found",
+		ConfigPathOverride,
+		"cloudflare_account_id",
+		"cloudflare_api_key",
+		"--config",
+		"CASKCONFIG",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q should mention %q", err.Error(), want)
+		}
 	}
 }
 
@@ -245,8 +257,8 @@ func TestApiRequest_ConfigLoadError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from missing config, got nil")
 	}
-	if !strings.Contains(err.Error(), "failed to read config file") {
-		t.Errorf("error %q should bubble up the config read error", err.Error())
+	if !IsMissingConfig(err) {
+		t.Errorf("error %q should bubble up the missing-config error", err.Error())
 	}
 }
 
